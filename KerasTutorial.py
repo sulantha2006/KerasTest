@@ -124,16 +124,16 @@ def get_weather_on_loc(st1_dict, st2_dict, location, date):
     if (date in st1_dict) and (date in st2_dict):
         weather_from_st1 = st1_dict[date]
         weather_from_st2 = st2_dict[date]
-        weather_line = [((weather_from_st1[i]*(1+1/dist_to_st1)) + (weather_from_st2[i]*(1+1/dist_to_st2)))/float(2) for i in range(len(weather_from_st1))]
+        weather_line = [((weather_from_st1[i]*dist_to_st1) + (weather_from_st2[i]*dist_to_st2))/float(dist_to_st1+dist_to_st2) for i in range(len(weather_from_st1))]
     if (date not in st1_dict) and (date in st2_dict):
         weather_from_st2 = st2_dict[date]
-        weather_line = [(weather_from_st2[i]*(1+1/dist_to_st2)) for i in range(len(weather_from_st2))]
+        weather_line = weather_from_st2
     if (date in st1_dict) and (date not in st2_dict):
         weather_from_st1 = st1_dict[date]
-        weather_line = [(weather_from_st1[i]*(1+1/dist_to_st1)) for i in range(len(weather_from_st1))]
+        weather_line = weather_from_st1
     if (date not in st1_dict) and (date not in st2_dict):
         weather_from_st1, weather_from_st2 = assume_weather_on_date(date, st1_dict, st2_dict)
-        weather_line = [((weather_from_st1[i]*(1+1/dist_to_st1)) + (weather_from_st2[i]*(1+1/dist_to_st2)))/float(2) for i in range(len(weather_from_st1))]
+        weather_line = [((weather_from_st1[i]*dist_to_st1) + (weather_from_st2[i]*dist_to_st2))/float(dist_to_st1+dist_to_st2) for i in range(len(weather_from_st1))]
 
     return weather_line
 
@@ -209,78 +209,88 @@ print("Processing training data...")
 
 rows = []
 labels = []
+temp_rows = []
 fi = csv.reader(open("input/train.csv"))
 head = fi.__next__()
 indexes = dict([(head[i], i) for i in range(len(head))])
 weather_st1_dic, weather_st2_dic, weather_indexes = get_weather_data()
+final_headers = ['month', 'week', 'lat', 'lon', 'tmax', 'tmin', 'tavg', 'dew', 'wbulb', 'prec', 'pres', 'wnvPresent']
 lineNo=1
 for line in fi:
     print(lineNo)
     rows.append(process_line(line, indexes, weather_st1_dic, weather_st2_dic, weather_indexes))
     labels.append(float(line[indexes["WnvPresent"]]))
+    processed_data = process_line(line, indexes, weather_st1_dic, weather_st2_dic, weather_indexes)
+    processed_data.append(float(line[indexes["WnvPresent"]]))
+    temp_rows.append(processed_data)
     lineNo+=1
 
-X = np.array(rows)
-y = np.array(labels)
+fot = csv.writer(open('output/reg.csv', 'w'), lineterminator="\n")
+fot.writerow(final_headers)
+for l in temp_rows:
+    fot.writerow(l)
 
-X, y = shuffle(X, y)
-X, scaler = preprocess_data(X)
-Y = np_utils.to_categorical(y)
-
-input_dim = X.shape[1]
-output_dim = 2
-
-print("Validation...")
-
-nb_folds = 10
-kfolds = KFold(len(y), nb_folds)
-av_roc = 0.
-f = 0
-for train, valid in kfolds:
-    print('---'*20)
-    print('Fold', f)
-    print('---'*20)
-    f += 1
-    X_train = X[train]
-    X_valid = X[valid]
-    Y_train = Y[train]
-    Y_valid = Y[valid]
-    y_valid = y[valid]
-
-    print("Building model...")
-    model = build_model(input_dim, output_dim)
-
-    print("Training model...")
-
-    model.fit(X_train, Y_train, nb_epoch=100, batch_size=16, validation_data=(X_valid, Y_valid), verbose=0)
-    valid_preds = model.predict_proba(X_valid, verbose=0)
-    valid_preds = valid_preds[:, 1]
-    roc = metrics.roc_auc_score(y_valid, valid_preds)
-    print("ROC:", roc)
-    av_roc += roc
-
-print('Average ROC:', av_roc/nb_folds)
-
-print("Generating submission...")
-
-#model = build_model(input_dim, output_dim)
-#model.fit(X, Y, nb_epoch=100, batch_size=16, verbose=0)
-
-fi = csv.reader(open("input/test.csv"))
-head = fi.__next__()
-indexes = dict([(head[i], i) for i in range(len(head))])
-rows = []
-ids = []
-for line in fi:
-    rows.append(process_line(line, indexes, weather_st1_dic, weather_st2_dic, weather_indexes))
-    ids.append(line[0])
-X_test = np.array(rows)
-X_test, _ = preprocess_data(X_test, scaler)
-
-preds = model.predict_proba(X_test, verbose=0)
-
-fo = csv.writer(open("output/keras-nn.csv", "w"), lineterminator="\n")
-fo.writerow(["Id","WnvPresent"])
-
-for i, item in enumerate(ids):
-    fo.writerow([ids[i], preds[i][1]])
+# X = np.array(rows)
+# y = np.array(labels)
+#
+# X, y = shuffle(X, y)
+# X, scaler = preprocess_data(X)
+# Y = np_utils.to_categorical(y)
+#
+# input_dim = X.shape[1]
+# output_dim = 2
+#
+# print("Validation...")
+#
+# nb_folds = 10
+# kfolds = KFold(len(y), nb_folds)
+# av_roc = 0.
+# f = 0
+# for train, valid in kfolds:
+#     print('---'*20)
+#     print('Fold', f)
+#     print('---'*20)
+#     f += 1
+#     X_train = X[train]
+#     X_valid = X[valid]
+#     Y_train = Y[train]
+#     Y_valid = Y[valid]
+#     y_valid = y[valid]
+#
+#     print("Building model...")
+#     model = build_model(input_dim, output_dim)
+#
+#     print("Training model...")
+#
+#     model.fit(X_train, Y_train, nb_epoch=100, batch_size=16, validation_data=(X_valid, Y_valid), verbose=0)
+#     valid_preds = model.predict_proba(X_valid, verbose=0)
+#     valid_preds = valid_preds[:, 1]
+#     roc = metrics.roc_auc_score(y_valid, valid_preds)
+#     print("ROC:", roc)
+#     av_roc += roc
+#
+# print('Average ROC:', av_roc/nb_folds)
+#
+# print("Generating submission...")
+#
+# #model = build_model(input_dim, output_dim)
+# #model.fit(X, Y, nb_epoch=100, batch_size=16, verbose=0)
+#
+# fi = csv.reader(open("input/test.csv"))
+# head = fi.__next__()
+# indexes = dict([(head[i], i) for i in range(len(head))])
+# rows = []
+# ids = []
+# for line in fi:
+#     rows.append(process_line(line, indexes, weather_st1_dic, weather_st2_dic, weather_indexes))
+#     ids.append(line[0])
+# X_test = np.array(rows)
+# X_test, _ = preprocess_data(X_test, scaler)
+#
+# preds = model.predict_proba(X_test, verbose=0)
+#
+# fo = csv.writer(open("output/keras-nn.csv", "w"), lineterminator="\n")
+# fo.writerow(["Id","WnvPresent"])
+#
+# for i, item in enumerate(ids):
+#     fo.writerow([ids[i], preds[i][1]])
