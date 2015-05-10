@@ -331,7 +331,7 @@ print('Average ROC:', av_roc / nb_folds)
 print("Generating submission...")
 
 model = build_model(input_dim, output_dim)
-model.fit(X, Y, nb_epoch=100, batch_size=16, verbose=1)
+model.fit(X, Y, nb_epoch=100, batch_size=16, verbose=0)
 
 fi = csv.reader(open("input/test.csv"))
 head = fi.__next__()
