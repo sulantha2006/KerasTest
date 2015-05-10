@@ -76,6 +76,7 @@ def get_close_dates(date, no_of_dates, all_dates, backwards):
         return dict((time.strftime('%Y-%m-%d', n), d) for (n, d) in close_dates_tuple_list)
 
 def assume_weather_on_date(date, st1_dict, st2_dict):
+    print('Assuming weather for {0}'.format(date))
     all_available_dates = set(set(st1_dict.keys())|set(st2_dict.keys()))
     close_dates = get_close_dates(date, 30, all_available_dates, False)
     divide_value = 0
@@ -100,7 +101,7 @@ def assume_weather_on_date(date, st1_dict, st2_dict):
                 st2_values = multiplied_list
             else:
                 st2_values = [sum(x) for x in zip(st2_values, multiplied_list)]
-
+    print('Assumed weather : {0} - {1}'.format([value/float(divide_value) for value in st1_values], [value/float(divide_value) for value in st2_values]))
     return [value/float(divide_value) for value in st1_values], [value/float(divide_value) for value in st2_values]
 
 def modify_weather_on_close_days(weather_line, date, number_of_days, st1_data, st2_data):
@@ -176,18 +177,18 @@ def shuffle(X, y, seed=1337):
 
 def build_model(input_dim, output_dim):
     model = Sequential()
-    model.add(Dense(input_dim, 16, init='lecun_uniform'))
+    model.add(Dense(input_dim, 32, init='lecun_uniform'))
     model.add(Activation('relu'))
-    model.add(Dropout(0.8))
+    model.add(Dropout(0.5))
 
-    model.add(Dense(16, 16, init='lecun_uniform'))
+    model.add(Dense(32, 32, init='lecun_uniform'))
     model.add(Activation('relu'))
-    model.add(Dropout(0.6))
+    model.add(Dropout(0.5))
+
+    model.add(Dense(32, 32, init='lecun_uniform'))
+    model.add(Activation('relu'))
+    model.add(Dropout(0.5))
     #
-    # model.add(Dense(32, 64, init='lecun_uniform'))
-    # model.add(Activation('relu'))
-    # model.add(Dropout(0.4))
-    # #
     # model.add(Dense(64, 128, init='lecun_uniform'))
     # model.add(Activation('relu'))
     # model.add(Dropout(0.3))
@@ -196,10 +197,10 @@ def build_model(input_dim, output_dim):
     # model.add(Activation('relu'))
     # model.add(Dropout(0.2))
 
-    model.add(Dense(16, output_dim, init='lecun_uniform'))
+    model.add(Dense(32, output_dim, init='lecun_uniform'))
     model.add(Activation('softmax'))
 
-    model.compile(loss='categorical_crossentropy', optimizer="adam")
+    model.compile(loss='categorical_crossentropy', optimizer="adadelta")
     return model
 
 
@@ -225,72 +226,72 @@ for line in fi:
     temp_rows.append(processed_data)
     lineNo+=1
 
-fot = csv.writer(open('output/reg.csv', 'w'), lineterminator="\n")
-fot.writerow(final_headers)
-for l in temp_rows:
-    fot.writerow(l)
+#fot = csv.writer(open('output/reg.csv', 'w'), lineterminator="\n")
+#fot.writerow(final_headers)
+#for l in temp_rows:
+    #fot.writerow(l)
 
-# X = np.array(rows)
-# y = np.array(labels)
-#
-# X, y = shuffle(X, y)
-# X, scaler = preprocess_data(X)
-# Y = np_utils.to_categorical(y)
-#
-# input_dim = X.shape[1]
-# output_dim = 2
-#
-# print("Validation...")
-#
-# nb_folds = 10
-# kfolds = KFold(len(y), nb_folds)
-# av_roc = 0.
-# f = 0
-# for train, valid in kfolds:
-#     print('---'*20)
-#     print('Fold', f)
-#     print('---'*20)
-#     f += 1
-#     X_train = X[train]
-#     X_valid = X[valid]
-#     Y_train = Y[train]
-#     Y_valid = Y[valid]
-#     y_valid = y[valid]
-#
-#     print("Building model...")
-#     model = build_model(input_dim, output_dim)
-#
-#     print("Training model...")
-#
-#     model.fit(X_train, Y_train, nb_epoch=100, batch_size=16, validation_data=(X_valid, Y_valid), verbose=0)
-#     valid_preds = model.predict_proba(X_valid, verbose=0)
-#     valid_preds = valid_preds[:, 1]
-#     roc = metrics.roc_auc_score(y_valid, valid_preds)
-#     print("ROC:", roc)
-#     av_roc += roc
-#
-# print('Average ROC:', av_roc/nb_folds)
-#
-# print("Generating submission...")
-#
-# #model = build_model(input_dim, output_dim)
-# #model.fit(X, Y, nb_epoch=100, batch_size=16, verbose=0)
-#
-# fi = csv.reader(open("input/test.csv"))
-# head = fi.__next__()
-# indexes = dict([(head[i], i) for i in range(len(head))])
-# rows = []
-# ids = []
-# for line in fi:
-#     rows.append(process_line(line, indexes, weather_st1_dic, weather_st2_dic, weather_indexes))
-#     ids.append(line[0])
-# X_test = np.array(rows)
-# X_test, _ = preprocess_data(X_test, scaler)
-#
-# preds = model.predict_proba(X_test, verbose=0)
-#
-# fo = csv.writer(open("output/keras-nn.csv", "w"), lineterminator="\n")
-# fo.writerow(["Id","WnvPresent"])
-#
-# for i, item in enumerate(ids):
-#     fo.writerow([ids[i], preds[i][1]])
+X = np.array(rows)
+y = np.array(labels)
+
+X, y = shuffle(X, y)
+X, scaler = preprocess_data(X)
+Y = np_utils.to_categorical(y)
+
+input_dim = X.shape[1]
+output_dim = 2
+
+print("Validation...")
+
+nb_folds = 10
+kfolds = KFold(len(y), nb_folds)
+av_roc = 0.
+f = 0
+for train, valid in kfolds:
+    print('---'*20)
+    print('Fold', f)
+    print('---'*20)
+    f += 1
+    X_train = X[train]
+    X_valid = X[valid]
+    Y_train = Y[train]
+    Y_valid = Y[valid]
+    y_valid = y[valid]
+
+    print("Building model...")
+    model = build_model(input_dim, output_dim)
+
+    print("Training model...")
+
+    model.fit(X_train, Y_train, nb_epoch=100, batch_size=16, validation_data=(X_valid, Y_valid), verbose=0)
+    valid_preds = model.predict_proba(X_valid, verbose=0)
+    valid_preds = valid_preds[:, 1]
+    roc = metrics.roc_auc_score(y_valid, valid_preds)
+    print("ROC:", roc)
+    av_roc += roc
+
+print('Average ROC:', av_roc/nb_folds)
+
+print("Generating submission...")
+
+#model = build_model(input_dim, output_dim)
+#model.fit(X, Y, nb_epoch=100, batch_size=16, verbose=0)
+
+fi = csv.reader(open("input/test.csv"))
+head = fi.__next__()
+indexes = dict([(head[i], i) for i in range(len(head))])
+rows = []
+ids = []
+for line in fi:
+    rows.append(process_line(line, indexes, weather_st1_dic, weather_st2_dic, weather_indexes))
+    ids.append(line[0])
+X_test = np.array(rows)
+X_test, _ = preprocess_data(X_test, scaler)
+
+preds = model.predict_proba(X_test, verbose=0)
+
+fo = csv.writer(open("output/keras-nn.csv", "w"), lineterminator="\n")
+fo.writerow(["Id","WnvPresent"])
+
+for i, item in enumerate(ids):
+    fo.writerow([ids[i], preds[i][1]])
