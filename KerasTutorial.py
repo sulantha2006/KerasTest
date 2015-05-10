@@ -8,26 +8,34 @@ from sklearn.cross_validation import KFold
 from sklearn.preprocessing import StandardScaler
 import math
 import time
+import datetime
 import operator
 
 weather_st1_coor = (41.995, -87.933)
 weather_st2_coor = (41.786, -87.752)
 
 def get_distance(point1, point2):
-    (lat1, lon1) = point1
-    (lat2, lon2) = point2
-    dlon = lon2 - lon1
-    dlat = lat2 - lat1
-    a = (math.sin(dlat/2))**2 + math.cos(lat1) * math.cos(lat2) * (math.sin(dlon/2))**2
-    c = 2 * math.atan2( math.sqrt(a), math.sqrt(1-a) )
-    d = 6373 * c
-    return d
+    (lat1, long1) = point1
+    (lat2, long2) = point2
+    degrees_to_radians = math.pi / 180.0
+
+    phi1 = (90.0 - lat1) * degrees_to_radians
+    phi2 = (90.0 - lat2) * degrees_to_radians
+
+    theta1 = long1 * degrees_to_radians
+    theta2 = long2 * degrees_to_radians
+
+    cos = (math.sin(phi1) * math.sin(phi2) * math.cos(theta1 - theta2) + math.cos(phi1) * math.cos(phi2))
+    arc = math.acos(cos)
+
+    return arc * 6373
+
 
 def filter_weather_data(line, weather_indexes):
     tmax = float(line[weather_indexes["Tmax"]])
     tmin = float(line[weather_indexes["Tmin"]])
     if str.strip(line[weather_indexes["Tmin"]]) == 'M':
-        tavg = (tmax+tmin)/float(2)
+        tavg = (tmax + tmin) / float(2)
     else:
         tavg = float(line[weather_indexes["Tmin"]])
     dew = float(line[weather_indexes["DewPoint"]])
@@ -49,6 +57,7 @@ def filter_weather_data(line, weather_indexes):
     final_line = [tmax, tmin, tavg, dew, wblub, prec, pres]
     return final_line
 
+
 def get_weather_data():
     weather_dic_st1 = {}
     weather_dic_st2 = {}
@@ -60,24 +69,30 @@ def get_weather_data():
             weather_dic_st1[line[1]] = filter_weather_data(line, weather_indexes)
         elif line[0] == '2':
             weather_dic_st2[line[1]] = filter_weather_data(line, weather_indexes)
-    final_index = dict([('Tmax',0), ('Tmin',1), ('Tavg',2), ('DewPoint',3), ('WetBulb',4), ('PrecipTotal',5), ('StnPressure',6)])
+    final_index = dict([('Tmax', 0), ('Tmin', 1), ('Tavg', 2), ('DewPoint', 3), ('WetBulb', 4), ('PrecipTotal', 5),
+                        ('StnPressure', 6)])
     return weather_dic_st1, weather_dic_st2, final_index
+
 
 def get_close_dates(date, no_of_dates, all_dates, backwards):
     if not backwards:
         base_date = time.strptime(date, '%Y-%m-%d')
         all_dates_list = [time.strptime(i, '%Y-%m-%d') for i in all_dates]
-        close_dates_tuple_list = [(n, int(d)/86400) for d, n in sorted((abs(time.mktime(x)-time.mktime(base_date)), x) for x in all_dates_list)[:no_of_dates]]
+        close_dates_tuple_list = [(n, int(d) / 86400) for d, n in
+                                  sorted((abs(time.mktime(x) - time.mktime(base_date)), x) for x in all_dates_list)[
+                                  :no_of_dates]]
         return dict((time.strftime('%Y-%m-%d', n), d) for (n, d) in close_dates_tuple_list)
     else:
         base_date = time.strptime(date, '%Y-%m-%d')
         all_dates_list = [time.strptime(i, '%Y-%m-%d') for i in all_dates]
-        close_dates_tuple_list = [(n, int(d)/86400) for d, n in sorted((abs(time.mktime(x)-time.mktime(base_date)), x) for x in all_dates_list if x < base_date)[:no_of_dates]]
+        close_dates_tuple_list = [(n, int(d) / 86400) for d, n in sorted(
+            (abs(time.mktime(x) - time.mktime(base_date)), x) for x in all_dates_list if x < base_date)[:no_of_dates]]
         return dict((time.strftime('%Y-%m-%d', n), d) for (n, d) in close_dates_tuple_list)
+
 
 def assume_weather_on_date(date, st1_dict, st2_dict):
     print('Assuming weather for {0}'.format(date))
-    all_available_dates = set(set(st1_dict.keys())|set(st2_dict.keys()))
+    all_available_dates = set(set(st1_dict.keys()) | set(st2_dict.keys()))
     close_dates = get_close_dates(date, 30, all_available_dates, False)
     divide_value = 0
     st1_values = []
@@ -88,7 +103,7 @@ def assume_weather_on_date(date, st1_dict, st2_dict):
         divide_value += distance_weight
         if av_date in st1_dict:
             st1_value_list = st1_dict[av_date]
-            multiplied_list = [l*distance_weight for l in st1_value_list]
+            multiplied_list = [l * distance_weight for l in st1_value_list]
             if not st1_values:
                 st1_values = multiplied_list
             else:
@@ -96,28 +111,31 @@ def assume_weather_on_date(date, st1_dict, st2_dict):
 
         if av_date in st2_dict:
             st2_value_list = st2_dict[av_date]
-            multiplied_list = [l*distance_weight for l in st2_value_list]
+            multiplied_list = [l * distance_weight for l in st2_value_list]
             if not st2_values:
                 st2_values = multiplied_list
             else:
                 st2_values = [sum(x) for x in zip(st2_values, multiplied_list)]
-    print('Assumed weather : {0} - {1}'.format([value/float(divide_value) for value in st1_values], [value/float(divide_value) for value in st2_values]))
-    return [value/float(divide_value) for value in st1_values], [value/float(divide_value) for value in st2_values]
+    print('Assumed weather : {0} - {1}'.format([value / float(divide_value) for value in st1_values],
+                                               [value / float(divide_value) for value in st2_values]))
+    return [value / float(divide_value) for value in st1_values], [value / float(divide_value) for value in st2_values]
+
 
 def modify_weather_on_close_days(weather_line, date, number_of_days, st1_data, st2_data):
-    all_available_dates = set(set(st1_data.keys())|set(st2_data.keys()))
+    all_available_dates = set(set(st1_data.keys()) | set(st2_data.keys()))
     close_dates = get_close_dates(date, number_of_days, all_available_dates, True)
     for av_date in close_dates:
         distance = close_dates[av_date]
 
         if av_date in st1_data:
-            mod_value_list = [val/float(distance) for val in st1_data[av_date]]
+            mod_value_list = [val / float(distance) for val in st1_data[av_date]]
             weather_line = [sum(x) for x in zip(weather_line, mod_value_list)]
 
         if av_date in st2_data:
-            mod_value_list = [val/float(distance) for val in st2_data[av_date]]
+            mod_value_list = [val / float(distance) for val in st2_data[av_date]]
             weather_line = [sum(x) for x in zip(weather_line, mod_value_list)]
     return weather_line
+
 
 def get_weather_on_loc(st1_dict, st2_dict, location, date):
     dist_to_st1 = get_distance(location, weather_st1_coor)
@@ -125,7 +143,8 @@ def get_weather_on_loc(st1_dict, st2_dict, location, date):
     if (date in st1_dict) and (date in st2_dict):
         weather_from_st1 = st1_dict[date]
         weather_from_st2 = st2_dict[date]
-        weather_line = [((weather_from_st1[i]*dist_to_st1) + (weather_from_st2[i]*dist_to_st2))/float(dist_to_st1+dist_to_st2) for i in range(len(weather_from_st1))]
+        weather_line = [((weather_from_st1[i] * dist_to_st1) + (weather_from_st2[i] * dist_to_st2)) / float(
+            dist_to_st1 + dist_to_st2) for i in range(len(weather_from_st1))]
     if (date not in st1_dict) and (date in st2_dict):
         weather_from_st2 = st2_dict[date]
         weather_line = weather_from_st2
@@ -134,19 +153,23 @@ def get_weather_on_loc(st1_dict, st2_dict, location, date):
         weather_line = weather_from_st1
     if (date not in st1_dict) and (date not in st2_dict):
         weather_from_st1, weather_from_st2 = assume_weather_on_date(date, st1_dict, st2_dict)
-        weather_line = [((weather_from_st1[i]*dist_to_st1) + (weather_from_st2[i]*dist_to_st2))/float(dist_to_st1+dist_to_st2) for i in range(len(weather_from_st1))]
+        weather_line = [((weather_from_st1[i] * dist_to_st1) + (weather_from_st2[i] * dist_to_st2)) / float(
+            dist_to_st1 + dist_to_st2) for i in range(len(weather_from_st1))]
 
     return weather_line
+
 
 def process_line(line, indexes, st1_dic, st2_dic, weather_indexes):
     def get(name):
         return line[indexes[name]]
 
     date = get("Date")
+    year = float(date.split('-')[0])
     month = float(date.split('-')[1])
     week = int(date.split('-')[1]) * 4 + int(date.split('-')[2]) / 7
     latitude = float(get("Latitude"))
     longitude = float(get("Longitude"))
+    addAcc = float(get("AddressAccuracy"))
     location = (latitude, longitude)
     weather_on_loc = get_weather_on_loc(st1_dic, st2_dic, location, date)
     mod_weather_on_loc = modify_weather_on_close_days(weather_on_loc, date, 100, st1_dic, st2_dic)
@@ -158,7 +181,8 @@ def process_line(line, indexes, st1_dic, st2_dic, weather_indexes):
     precip = float(mod_weather_on_loc[weather_indexes["PrecipTotal"]])
     pressure = float(mod_weather_on_loc[weather_indexes["StnPressure"]])
 
-    return [month, week, latitude, longitude, tmax, tmin, tavg, dewpoint, wetbulb, precip, pressure]
+    return [year, month, week, latitude, longitude, addAcc, tmax, tmin, tavg, dewpoint, wetbulb, precip, pressure]
+
 
 def preprocess_data(X, scaler=None):
     if not scaler:
@@ -166,6 +190,7 @@ def preprocess_data(X, scaler=None):
         scaler.fit(X)
     X = scaler.transform(X)
     return X, scaler
+
 
 def shuffle(X, y, seed=1337):
     np.random.seed(seed)
@@ -175,6 +200,7 @@ def shuffle(X, y, seed=1337):
     y = y[shuffle]
     return X, y
 
+
 def build_model(input_dim, output_dim):
     model = Sequential()
     model.add(Dense(input_dim, 32, init='lecun_uniform'))
@@ -183,11 +209,11 @@ def build_model(input_dim, output_dim):
 
     model.add(Dense(32, 32, init='lecun_uniform'))
     model.add(Activation('relu'))
-    model.add(Dropout(0.5))
+    model.add(Dropout(0.6))
 
     model.add(Dense(32, 32, init='lecun_uniform'))
     model.add(Activation('relu'))
-    model.add(Dropout(0.5))
+    model.add(Dropout(0.7))
     #
     # model.add(Dense(64, 128, init='lecun_uniform'))
     # model.add(Activation('relu'))
@@ -204,6 +230,36 @@ def build_model(input_dim, output_dim):
     return model
 
 
+def filter_based_on_spray(preds, X_test, pred_date_list):
+    fi = csv.reader(open("input/spray.csv"))
+    head = fi.__next__()
+    indexes = dict([(head[i], i) for i in range(len(head))])
+    spray_dict = {}
+    for s_line in fi:
+        if s_line[0] not in spray_dict:
+            spray_dict[s_line[0]] = [(s_line[2], s_line[3])]
+        else:
+            spray_dict[s_line[0]].append((s_line[2], s_line[3]))
+        pred_count = 0
+        for pred_date in pred_date_list:
+            spray_found = False
+            pred_date_s = datetime.datetime.strptime(pred_date, '%Y-%m-%d').date()
+            for k in range(30):
+                prev_day_s = pred_date_s - datetime.timedelta(k)
+                prev_day = pred_date_s.strftime('%Y-%m-%d')
+                if prev_day in spray_dict:
+                    spray_data_for_day = spray_dict[prev_day]
+                    pred_location = (X_test[pred_count][3], X_test[pred_count][4])
+                    for spray_loc in spray_data_for_day:
+                        if get_distance(pred_location, spray_loc) <= 0.300:
+                            preds[pred_count][1] = 0.0
+                            spray_found = True
+                            break
+                if spray_found:
+                    break
+            pred_count += 1
+    return preds
+
 # now the actual script
 
 print("Processing training data...")
@@ -211,25 +267,25 @@ print("Processing training data...")
 rows = []
 labels = []
 temp_rows = []
-fi = csv.reader(open("input/train.csv"))
+fi = csv.reader(open("input/train.csv").read().splitlines())
 head = fi.__next__()
 indexes = dict([(head[i], i) for i in range(len(head))])
 weather_st1_dic, weather_st2_dic, weather_indexes = get_weather_data()
-final_headers = ['month', 'week', 'lat', 'lon', 'tmax', 'tmin', 'tavg', 'dew', 'wbulb', 'prec', 'pres', 'wnvPresent']
-lineNo=1
+final_headers = ['year', 'month', 'week', 'lat', 'lon', 'AddAcc', 'tmax', 'tmin', 'tavg', 'dew', 'wbulb', 'prec',
+                 'pres', 'wnvPresent']
+lineNo = 1
 for line in fi:
-    print(lineNo)
     rows.append(process_line(line, indexes, weather_st1_dic, weather_st2_dic, weather_indexes))
     labels.append(float(line[indexes["WnvPresent"]]))
-    processed_data = process_line(line, indexes, weather_st1_dic, weather_st2_dic, weather_indexes)
-    processed_data.append(float(line[indexes["WnvPresent"]]))
-    temp_rows.append(processed_data)
-    lineNo+=1
+    #processed_data = process_line(line, indexes, weather_st1_dic, weather_st2_dic, weather_indexes)
+    #processed_data.append(float(line[indexes["WnvPresent"]]))
+    #temp_rows.append(processed_data)
+    #lineNo+=1
 
 #fot = csv.writer(open('output/reg.csv', 'w'), lineterminator="\n")
 #fot.writerow(final_headers)
 #for l in temp_rows:
-    #fot.writerow(l)
+#fot.writerow(l)
 
 X = np.array(rows)
 y = np.array(labels)
@@ -248,9 +304,9 @@ kfolds = KFold(len(y), nb_folds)
 av_roc = 0.
 f = 0
 for train, valid in kfolds:
-    print('---'*20)
+    print('---' * 20)
     print('Fold', f)
-    print('---'*20)
+    print('---' * 20)
     f += 1
     X_train = X[train]
     X_valid = X[valid]
@@ -270,19 +326,21 @@ for train, valid in kfolds:
     print("ROC:", roc)
     av_roc += roc
 
-print('Average ROC:', av_roc/nb_folds)
+print('Average ROC:', av_roc / nb_folds)
 
 print("Generating submission...")
 
-#model = build_model(input_dim, output_dim)
-#model.fit(X, Y, nb_epoch=100, batch_size=16, verbose=0)
+model = build_model(input_dim, output_dim)
+model.fit(X, Y, nb_epoch=100, batch_size=16, verbose=1)
 
 fi = csv.reader(open("input/test.csv"))
 head = fi.__next__()
 indexes = dict([(head[i], i) for i in range(len(head))])
 rows = []
 ids = []
+pred_date_list = []
 for line in fi:
+    pred_date_list.append(line[1])
     rows.append(process_line(line, indexes, weather_st1_dic, weather_st2_dic, weather_indexes))
     ids.append(line[0])
 X_test = np.array(rows)
@@ -290,8 +348,14 @@ X_test, _ = preprocess_data(X_test, scaler)
 
 preds = model.predict_proba(X_test, verbose=0)
 
+
+
+
+print('Filtering based on spray data ...')
+final_pred = filter_based_on_spray(preds, rows, pred_date_list)
+print('Done..')
 fo = csv.writer(open("output/keras-nn.csv", "w"), lineterminator="\n")
-fo.writerow(["Id","WnvPresent"])
+fo.writerow(["Id", "WnvPresent"])
 
 for i, item in enumerate(ids):
-    fo.writerow([ids[i], preds[i][1]])
+        fo.writerow([ids[i], final_pred[i][1]])
